@@ -39,8 +39,45 @@ rl.on('line', (input) => {
     [command, params] =  parseWord(input);
     try{
         switch (command){
+            case "clear":
+                clearFunctStack();
+                break;
+            case "debug":
+                [command, params] =  parseWord(params);
+                switch (command){
+                    case "error":
+                        if (lastError == null) {
+                            console.log("No recorded error.");
+                            break;
+                        }
+                        console.log("<< Printing last error >>");
+                        console.log(lastError);
+                        console.log("<<<<<<<<<<<<>>>>>>>>>>>>>");
+                        break;
+                    case "server":
+                        console.log("<< Debug report for minecraft server >>");
+                        console.log(minecraftServer);
+                        console.log("<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>");
+                        break;
+                    case "socket":
+                        console.log("<< Debug report for socket >>");
+                        console.log(wss);
+                        console.log("<<<<<<<<<<<<<<>>>>>>>>>>>>>>>");
+                        break;
+                    case "status":
+                        process.stdout.write(`Minecraft server active? ${isMinecraftServerActive}\n`);
+                        process.stdout.write(`Websocket active? ${isWebsocketOnline}\n`);
+                        process.stdout.write(`Websocket has Client? ${currentClient !== null}\n`);
+                        break;
+                    default:
+                        process.stdout.write(`Unknown command: ${input}\n`);
+                }
+                break;
             case "do":
                 minecraftServer.stdin.write(`${params}\n`);
+                break;
+            case "echo":
+                process.stdout.write(`${params}\n`);
                 break;
             case "say":
             case "tellraw":
@@ -50,21 +87,6 @@ rl.on('line', (input) => {
                 break;
             case "op":
                 minecraftServer.stdin.write(`${input}\n`);
-                break;
-            case "echo":
-                process.stdout.write(`${params}\n`);
-                break;
-            case "clear":
-                clearFunctStack();
-            break;
-            case "close":
-            case "stop":
-                minecraftServer.stdin.write(`stop\n`);
-                break;
-            case "restart":
-                pushFunctStack(() => {minecraftServer.stdin.write(`stop\n`);}, () => isMinecraftServerActive);
-                pushFunctStack(() => {startMinecraftServer()});
-                handleFunctStack();
                 break;
             case "start":
                 startMinecraftServer();
@@ -78,63 +100,29 @@ rl.on('line', (input) => {
                 process.stdout.write(`Function Stack function set? ${currentFunction !== null}\n`);
                 process.stdout.write("############################################\n");
                 break;
-            case "debug":
-                [command, params] =  parseWord(params);
-                switch (command){
-                    case "server":
-                        console.log("<< Debug report for minecraft server >>");
-                        console.log(minecraftServer);
-                        console.log("<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>");
-                        break;
-                    case "socket":
-                        console.log("<< Debug report for socket >>");
-                        console.log(wss);
-                        console.log("<<<<<<<<<<<<<<>>>>>>>>>>>>>>>");
-                        break;
-                    case "error":
-                        if (lastError == null) {
-                            console.log("No recorded error.");
-                            break;
-                        }
-                        console.log("<< Printing last error >>");
-                        console.log(lastError);
-                        console.log("<<<<<<<<<<<<>>>>>>>>>>>>>");
-                        break;
-                    case "status":
-                        process.stdout.write(`Minecraft server active? ${isMinecraftServerActive}\n`);
-                        break;
-                    default:
-                        process.stdout.write(`Unknown command: ${input}\n`);
-                }
+            case "stop":
+            case "close":
+                minecraftServer.stdin.write(`stop\n`);
                 break;
-            case "ssh":
-                [command, params] =  parseWord(params);
-                switch (command){
-                    case "stop":
-                        console.log("Um idk how to do that yet");
-                        isSSHTunnelActive = false;
-                        break;
-                    case "start":
-                        startSSHTunel();
-                        break;
-                    default:
-                        process.stdout.write(`Unknown command: ${input}\n`);
-                }
+            case "quit":
+                pushFunctStack(() => {minecraftServer.stdin.write(`stop\n`);}, () => isMinecraftServerActive);
+                pushFunctStack(() => {wss.close()},                            () => isWebsocketOnline);
+                pushFunctStack(() => {process.exit()});
+                handleFunctStack();
+                break;
+            case "regex":
+                const boring_server = /^\[.*\]: (.*)/;
+                console.log(params.match(boring_server_jargon)[1]);
+                break;
+            case "restart":
+                pushFunctStack(() => {minecraftServer.stdin.write(`stop\n`);}, () => isMinecraftServerActive);
+                pushFunctStack(() => {startMinecraftServer()});
+                handleFunctStack();
                 break;
             case "socket":
             case "websocket":
                     [command, params] =  parseWord(params);
                     switch (command){
-                        case "stop":
-                        case "close":
-                            if (isWebsocketOnline) wss.close();
-                            if (params === "force") {
-                                wss.terminate();
-                                wss = null;
-                                currentClient = null;
-                                isWebsocketOnline = false;
-                            }
-                            break;
                         case "restart":
                             pushFunctStack(() => {wss.close()},             () => isWebsocketOnline);
                             pushFunctStack(() => {startWebsocket(command)});
@@ -147,21 +135,36 @@ rl.on('line', (input) => {
                         case "status":
                             process.stdout.write(`Websocket active? ${isWebsocketOnline}\n`);
                             process.stdout.write(`Has Client? ${currentClient !== null}\n`);
-                            
+                            break;
+                        case "stop":
+                        case "close":
+                            if (isWebsocketOnline) wss.close();
+                            if (params === "force") {
+                                wss.terminate();
+                                wss = null;
+                                currentClient = null;
+                                isWebsocketOnline = false;
+                            }
                             break;
                         default:
                             process.stdout.write(`Unknown command: ${input}\n`);
                     }
                     break;
-            case "regex":
-                const boring_server = /^\[.*\]: (.*)/;
-                console.log(params.match(boring_server_jargon)[1]);
-                break;
-            case "quit":
-                pushFunctStack(() => {minecraftServer.stdin.write(`stop\n`);}, () => isMinecraftServerActive);
-                pushFunctStack(() => {wss.close()},                            () => isWebsocketOnline);
-                pushFunctStack(() => {process.exit()});
-                handleFunctStack();
+            case "ssh":
+                [command, params] =  parseWord(params);
+                switch (command){
+                    case "start":
+                        startSSHTunel();
+                        break;
+                    case "stop":
+                    case "close":
+                        console.log("Um idk how to do that yet");
+                        isSSHTunnelActive = false;
+                        break;
+                    
+                    default:
+                        process.stdout.write(`Unknown command: ${input}\n`);
+                }
                 break;
             default:
                 process.stdout.write(`Unknown command: ${input}\n`);
